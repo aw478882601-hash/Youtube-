@@ -1,4 +1,4 @@
-# app.py (للتجربة فقط - سيبوظ التطبيقات)
+# app.py (النسخة النهائية للإنتاج)
 from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
 import os
@@ -17,41 +17,34 @@ def get_video_info():
 
     video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # --- [ ✅✅ تعديل: تقليد كود Colab (بدون فلتر) ] ---
+    # --- [ ✅✅ هذا هو الفلتر النهائي ] ---
     ydl_opts = {
-        "skip_download": True
-        # (تم حذف فلتر "format" بالكامل زي ما طلبت)
+        "skip_download": True,
+        # 1. اطلب "أفضل" ملف يكون MP4 ومدمج (progressive)
+        # 2. لو ملقاش، هات format_id 18 (ده MP4 مدمج 360p مضمون)
+        "format": "best[ext=mp4][progressive=true]/18"
     }
-    # --- [ نهاية التعديل ] ---
+    # --- [ نهاية الفلتر ] ---
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            print(f"[YTDL] Extracting ALL formats for: {video_id}")
+            print(f"[YTDL] Extracting PROGRESSIVE MP4 for: {video_id}")
             info = ydl.extract_info(video_url, download=False)
             
+            # --- [ ✅✅ تعديل: بنجيب اللينك اللي الفلتر اختاره ] ---
+            # (الفلتر ده هيختار 18 أو أحسن MP4 مدمج)
+            stream_url = info.get('url')
             video_title = info.get('title', 'Video Title')
-            formats_list = info.get('formats', [])
 
-            # --- [ ✅✅ تعديل: تنظيف الليستة زي Colab ] ---
-            # (بنعمل ليستة جديدة بالمعلومات اللي إنت عاوزها)
-            clean_formats = []
-            for f in formats_list:
-                clean_formats.append({
-                    "format_id": f.get('format_id'),
-                    "height": f.get('height'),
-                    "ext": f.get('ext'),
-                    "protocol": f.get('protocol'), # (مهم عشان نشوف m3u8)
-                    "note": f.get('format_note'),
-                    "url": f.get('url') # اللينك
-                })
+            if not stream_url or "m3u8" in stream_url:
+                raise Exception("No valid Progressive MP4 stream URL found.")
 
-            print(f"[YTDL] Railway Success. Found {len(clean_formats)} formats.")
+            print(f"[YTDL] Railway Success for: {video_title}")
             
-            # --- [ ✅✅ الأهم: بنرجع "الليستة الكاملة" للتجربة ] ---
-            # (ده اللي هيبوظ التطبيقات، بس هتشوفه في المتصفح)
+            # بنرجع JSON زي ما الأندرويد و Vercel مستنيين
             return jsonify({
-                "videoTitle": video_title,
-                "available_formats": clean_formats 
+                "streamUrl": stream_url,
+                "videoTitle": video_title
             })
             
     except Exception as e:
