@@ -17,50 +17,51 @@ def get_video_info():
 
     video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # --- [ ✅✅ هذا هو التعديل الأهم ] ---
+    # --- [ ✅✅ هذا هو التعديل الأهم (صياغة جديدة) ] ---
     ydl_opts = {
         "skip_download": True,
-        # 1. اطلب ملف مدمج (progressive=true) ويكون mp4
-        # 2. امنع (protocol!=*m3u8) أي قايمة تشغيل
-        # 3. هات 720p أو الأقل المتاح
-        "format": "best[ext=mp4][height<=720][progressive=true][protocol!=*m3u8]/best[ext=mp4][height<=720][protocol!=*m3u8]"
+        # 1. حاول تجيب ملف مدمج 720p (أفضل سيناريو)
+        # 2. لو فشلت، هات أي ملف 720p (فيديو بس أو أي حاجة)
+        # 3. لو فشلت، هات أي ملف mp4 وخلاص
+        "format": "best[ext=mp4][height<=720][progressive=true]/best[ext=mp4][height<=720]/best[ext=mp4]/best"
     }
     # --- [ نهاية التعديل ] ---
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            print(f"[YTDL] Extracting PROGRESSIVE MP4 info for: {video_id}")
+            print(f"[YTDL] Extracting MP4 info for: {video_id}")
             info = ydl.extract_info(video_url, download=False)
-            
+
             stream_url = None
             video_title = info.get('title', 'Video Title')
 
             # --- [ ✅✅ تعديل: بندور على اللينك اللي طلبناه ] ---
             # (لأننا طلبنا فورمات محدد، لازم ندور عليه في القايمة)
-            for f in info.get('formats', []):
-                # بنشوف الفورمات اللي بيطابق طلبنا
-                if f.get('url') and f.get('ext') == 'mp4' and f.get('progressive') == True:
-                    stream_url = f['url']
-                    print(f"[YTDL] Found Progressive MP4 format: {f.get('format_id')}")
-                    break # لقيناه
 
-            # لو ملقناش فورمات مدمج (لسبب ما)، شوف اللينك الرئيسي
-            if not stream_url:
-                stream_url = info.get('url') 
-                # (ولو ده كان m3u8 برضه، هيفشل في الخطوة الجاية)
+            # (أولاً، بنشوف اللينك الرئيسي اللي yt-dlp اختاره)
+            stream_url = info.get('url')
 
             if not stream_url or "m3u8" in stream_url:
-                # لو لسه مفيش لينك، أو اللينك اللي رجع m3u8 (رغم إننا منعناه)
-                raise Exception("No valid Progressive MP4 stream URL found. Only HLS (m3u8) is available.")
+                # لو اللينك الرئيسي m3u8، بندور في القايمة
+                print(f"[YTDL] Main URL is m3u8, searching formats list...")
+                for f in info.get('formats', []):
+                    # بندور على أي حاجة mp4 ليها لينك
+                    if f.get('url') and f.get('ext') == 'mp4':
+                        stream_url = f['url']
+                        print(f"[YTDL] Found fallback MP4 format: {f.get('format_id')}")
+                        break # لقيناه
+
+            if not stream_url or "m3u8" in stream_url:
+                raise Exception("No valid MP4 stream URL found. Only HLS (m3u8) is available.")
 
             print(f"[YTDL] Railway Success for: {video_title}")
-            
+
             # بنرجع JSON زي ما الأندرويد و Vercel مستنيين
             return jsonify({
                 "streamUrl": stream_url,
                 "videoTitle": video_title
             })
-            
+
     except Exception as e:
         print(f"[YTDL] Railway FAILED: {str(e)}")
         return jsonify({"message": str(e)}), 500
