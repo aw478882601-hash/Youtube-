@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
 import os
@@ -17,51 +16,52 @@ def get_video_info():
 
     video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # --- [ ✅✅ هذا هو التعديل الأهم (صياغة جديدة) ] ---
+    # --- [ ✅✅ هذا هو التعديل المطلوب (تقليد كود Colab) ] ---
     ydl_opts = {
-        "skip_download": True,
-        # 1. حاول تجيب ملف مدمج 720p (أفضل سيناريو)
-        # 2. لو فشلت، هات أي ملف 720p (فيديو بس أو أي حاجة)
-        # 3. لو فشلت، هات أي ملف mp4 وخلاص
-        "format": "best[ext=mp4][height<=720][progressive=true]/best[ext=mp4][height<=720]/best[ext=mp4]/best"
+        "skip_download": True
+        # (تم حذف فلتر "format" بالكامل)
+        # (ده هيخلي yt-dlp يجيب "كل المتاح" ويختار الأفضل افتراضياً)
     }
     # --- [ نهاية التعديل ] ---
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            print(f"[YTDL] Extracting MP4 info for: {video_id}")
+            print(f"[YTDL] Extracting ALL formats for: {video_id}")
             info = ydl.extract_info(video_url, download=False)
-
+            
             stream_url = None
             video_title = info.get('title', 'Video Title')
 
-            # --- [ ✅✅ تعديل: بندور على اللينك اللي طلبناه ] ---
-            # (لأننا طلبنا فورمات محدد، لازم ندور عليه في القايمة)
+            # --- [ ✅✅ الفلترة اليدوية (لضمان MP4) ] ---
+            
+            # (1. بنشوف yt-dlp اختار إيه كـ "أفضل" افتراضي)
+            default_url = info.get('url')
 
-            # (أولاً، بنشوف اللينك الرئيسي اللي yt-dlp اختاره)
-            stream_url = info.get('url')
-
-            if not stream_url or "m3u8" in stream_url:
-                # لو اللينك الرئيسي m3u8، بندور في القايمة
-                print(f"[YTDL] Main URL is m3u8, searching formats list...")
+            if default_url and ('.mp4' in default_url or '.googlevideo.com/' in default_url) and not ".m3u8" in default_url:
+                # لو الاختيار الافتراضي هو MP4، استخدمه
+                print(f"[YTDL] Default best format is MP4. Using it.")
+                stream_url = default_url
+            else:
+                # (2. لو الاختيار الافتراضي M3U8، بندور إحنا في "كل المتاح")
+                print(f"[YTDL] Default format is M3U8 or invalid. Searching list for MP4...")
                 for f in info.get('formats', []):
-                    # بندور على أي حاجة mp4 ليها لينك
+                    # (بندور على أي حاجة mp4 ليها لينك)
                     if f.get('url') and f.get('ext') == 'mp4':
                         stream_url = f['url']
-                        print(f"[YTDL] Found fallback MP4 format: {f.get('format_id')}")
+                        print(f"[YTDL] Found fallback MP4 format: {f.get('format_id')} at {f.get('height')}p")
                         break # لقيناه
-
-            if not stream_url or "m3u8" in stream_url:
-                raise Exception("No valid MP4 stream URL found. Only HLS (m3u8) is available.")
+            
+            if not stream_url:
+                raise Exception("No valid MP4 stream URL found in any format.")
 
             print(f"[YTDL] Railway Success for: {video_title}")
-
-            # بنرجع JSON زي ما الأندرويد و Vercel مستنيين
+            
+            # (بنرجع JSON باللينك الـ MP4 اللي لقيناه)
             return jsonify({
                 "streamUrl": stream_url,
                 "videoTitle": video_title
             })
-
+            
     except Exception as e:
         print(f"[YTDL] Railway FAILED: {str(e)}")
         return jsonify({"message": str(e)}), 500
