@@ -20,37 +20,38 @@ def get_video_info():
     # --- [ ✅✅ هذا هو التعديل الأهم ] ---
     ydl_opts = {
         "skip_download": True,
-        # 1. اطلب احسن صورة (bv) + احسن صوت (ba)
-        # 2. اطلب دمجهم (merger) في فورمات mp4
-        "format": "bv[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b",
-        "outtmpl": "%(id)s.%(ext)s",
-        "postprocessors": [{
-            'key': 'FFmpegVideoRemuxer',
-            'preferedformat': 'mp4', # <-- عايزين الناتج mp4
-        }],
+        # 1. اطلب ملف مدمج (progressive=true) ويكون mp4
+        # 2. امنع (protocol!=*m3u8) أي قايمة تشغيل
+        # 3. هات 720p أو الأقل المتاح
+        "format": "best[ext=mp4][height<=720][progressive=true][protocol!=*m3u8]/best[ext=mp4][height<=720][protocol!=*m3u8]"
     }
     # --- [ نهاية التعديل ] ---
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            print(f"[YTDL] Extracting MERGED info for: {video_id}")
+            print(f"[YTDL] Extracting PROGRESSIVE MP4 info for: {video_id}")
             info = ydl.extract_info(video_url, download=False)
             
-            # --- [ ✅✅ تعديل: اختيار الفورمات بعد الدمج ] ---
-            # (بعد الدمج، اللينك بيكون موجود في 'url' الرئيسي)
-            stream_url = info.get('url')
+            stream_url = None
             video_title = info.get('title', 'Video Title')
 
+            # --- [ ✅✅ تعديل: بندور على اللينك اللي طلبناه ] ---
+            # (لأننا طلبنا فورمات محدد، لازم ندور عليه في القايمة)
+            for f in info.get('formats', []):
+                # بنشوف الفورمات اللي بيطابق طلبنا
+                if f.get('url') and f.get('ext') == 'mp4' and f.get('progressive') == True:
+                    stream_url = f['url']
+                    print(f"[YTDL] Found Progressive MP4 format: {f.get('format_id')}")
+                    break # لقيناه
+
+            # لو ملقناش فورمات مدمج (لسبب ما)، شوف اللينك الرئيسي
             if not stream_url:
-                # لو لسبب ما مفيش دمج، حاولنا ناخد أي فورمات mp4 عادي
-                print("[YTDL] Merge failed, falling back to regular format...")
-                for f in info.get('formats', []):
-                   if f.get('ext') == 'mp4' and f.get('url'):
-                       stream_url = f['url']
-                       break
-            
-            if not stream_url:
-                raise Exception("No valid stream URL found after merge attempt")
+                stream_url = info.get('url') 
+                # (ولو ده كان m3u8 برضه، هيفشل في الخطوة الجاية)
+
+            if not stream_url or "m3u8" in stream_url:
+                # لو لسه مفيش لينك، أو اللينك اللي رجع m3u8 (رغم إننا منعناه)
+                raise Exception("No valid Progressive MP4 stream URL found. Only HLS (m3u8) is available.")
 
             print(f"[YTDL] Railway Success for: {video_title}")
             
