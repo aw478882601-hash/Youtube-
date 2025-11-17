@@ -1,7 +1,7 @@
 # nixpacks.toml
 
 [phases.install]
-# بنقوله يسطب بايثون...
-pkgs = ["python3", "pip"]
+# بنقوله يسطب بايثون... ونود (عشان الجافاسكريبت)
+pkgs = ["python3", "pip", "nodejs-18"]
 # ... ويسطب ffmpeg معاه
 aptPkgs = ["ffmpeg"]
