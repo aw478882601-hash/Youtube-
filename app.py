@@ -1,4 +1,4 @@
-# app.py (النسخة النهائية - مدخلين)
+# app.py (النسخة النهائية - بأولوية للجودة العالية المدمجة)
 from flask import Flask, request, jsonify
 from yt_dlp import YoutubeDL
 import os
@@ -9,8 +9,7 @@ app = Flask(__name__)
 def hello_world():
     return "Hello, I am the Python Proxy Server on Railway!"
 
-# --- [ 1. مدخل التحميل (الأوفلاين) ] ---
-# (ده اللي بيجبر الدمج بـ ffmpeg عشان يدينا MP4 واحد)
+# --- [ 1. مدخل التحميل (الأوفلاين) - للأندرويد ] ---
 @app.route('/api/get-video-info')
 def get_video_info():
     video_id = request.args.get('youtubeId')
@@ -18,28 +17,42 @@ def get_video_info():
     
     video_url = f"https://www.youtube.com/watch?v={video_id}"
     
+    # --- [ ✅✅ هذا هو الفلتر الجديد اللي طلبته ] ---
     ydl_opts = {
         "skip_download": True,
-        "format": "bv[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b / best[ext=mp4][progressive=true][height<=720]/18",
-        "postprocessors": [{'key': 'FFmpegVideoRemuxer', 'preferedformat': 'mp4'}],
+        # 1. اطلب "أفضل" ملف يكون MP4 ومدمج (progressive) وجودته <= 720p
+        #    (ده هيجيب 720p أو 480p لو متاحين)
+        # 2. لو ملقاش، هات "format_id 18" (ده MP4 مدمج 360p مضمون 100%)
+        "format": "best[ext=mp4][progressive=true][height<=720]/18"
     }
+    # --- [ نهاية التعديل ] ---
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            print(f"[YTDL - MP4] Extracting MERGED info for: {video_id}")
+            print(f"[YTDL - MP4] Extracting BEST PROGRESSIVE MP4 for: {video_id}")
             info = ydl.extract_info(video_url, download=False)
+            
             stream_url = info.get('url')
             video_title = info.get('title', 'Video Title')
+
             if not stream_url or "m3u8" in stream_url:
-                raise Exception("No valid MP4 stream URL found after merge attempt")
+                # (لو لسبب ما الفلتر مرجعش لينك سليم، ارمي خطأ)
+                raise Exception("No valid Progressive MP4 stream URL found.")
+
+            print(f"[YTDL - MP4] Success for: {video_title} (Format: {info.get('format_id')})")
             
-            return jsonify({ "streamUrl": stream_url, "videoTitle": video_title })
+            # بنرجع JSON باللينك الـ MP4 اللي لقيناه
+            return jsonify({
+                "streamUrl": stream_url,
+                "videoTitle": video_title
+            })
+            
     except Exception as e:
         print(f"[YTDL - MP4] FAILED: {str(e)}")
         return jsonify({"message": str(e)}), 500
 
-# --- [ 2. مدخل المشاهدة (الأونلاين) ] ---
-# (ده اللي بيرجع الفهرس M3U8 عشان الجودات المتعددة)
+# --- [ 2. مدخل المشاهدة (الأونلاين) - للويب ] ---
+# (ده هيفضل زي ما هو عشان يجيب الجودات المتعددة m3u8)
 @app.route('/api/get-hls-playlist')
 def get_hls_playlist():
     video_id = request.args.get('youtubeId')
@@ -49,7 +62,6 @@ def get_hls_playlist():
     
     ydl_opts = {
         "skip_download": True,
-        # (بنطلب الفورمات اللي البروتوكول بتاعه m3u8)
         "format": "best[protocol=m3u8_native]/best[protocol=m3u8]"
     }
 
@@ -66,7 +78,6 @@ def get_hls_playlist():
 
             print(f"[YTDL - HLS] Success for: {video_title}")
             
-            # (بنرجع نفس الـ JSON بس اللينك ده m3u8)
             return jsonify({
                 "streamUrl": stream_url,
                 "videoTitle": video_title
